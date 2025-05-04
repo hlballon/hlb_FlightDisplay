@@ -1,8 +1,9 @@
 # hlb_FlightDisplay
 
-Ballooning Flight Display for the Visualization of Live and Logged Flight Data as well as WetterHeidi’s Upper_Winds Files
+Ballooning Flight Display for the Visualization of Live and Logged Flight Data as well as WetterHeidi’s Upper_Winds
 
 It is designed as an ExpoGo project.
+
 
 
 
@@ -29,6 +30,7 @@ It is designed as an ExpoGo project.
 1. Clone the repository:
 
    git clone https://github.com/hlballon/hlb_FlightDisplay.git
+
    cd hlb_FlightDisplay
    
 
@@ -51,7 +53,7 @@ It is designed as an ExpoGo project.
 2. **Open the App on Your Device:**
    - **Expo Go:**  
      Download [Expo Go](https://expo.dev/client) from the App Store (iOS) or Google Play (Android).  
-     In the Expo Dev Tools, scan the QR code with the Expo Go app to run the project on your phone.
+     In the Expo Dev Tools, scan the QR code with the Expo Go app to run the project on your phone / iPad.
 
    - **Simulator/Emulator:**  
      Alternatively, you can launch the iOS simulator or Android emulator directly from Expo Dev Tools if set up on your machine.
