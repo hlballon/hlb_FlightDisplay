@@ -17,6 +17,8 @@ const ScatterPlot = ({ data, width, height, xTitle, yTitle, xField, yField, yMin
   const leftPadding = 30;
   const max_acc = 0.05;
 
+  console.log(`ScatterPlot ${yTitle}: data length=${data.length}, showWeather=${showWeather}, weatherData length=${weatherData ? weatherData.length : 0}`);
+
   if (data.length === 0 && (!showWeather || !weatherData || weatherData.length === 0)) {
     return <Text>No data available for {yTitle}</Text>;
   }
@@ -126,8 +128,10 @@ const PolarPlot = React.memo(({ data, weatherData, showWeather, width, height, t
   const centerX = width / 2;
   const centerY = height / 2;
 
+  console.log(`PolarPlot: data length=${data.length}, showWeather=${showWeather}, weatherData length=${weatherData ? weatherData.length : 0}`);
+
   if (data.length === 0 && (!showWeather || !weatherData || weatherData.length === 0)) {
-    return <Text>No data available for {title}</Text>;
+    return <Text>No data available for {title || "Direction vs Altitude"}</Text>;
   }
 
   const altitudes = [...(showWeather && weatherData ? weatherData.map(point => point.altitude) : []), ...data.map(point => point.altitude)];
@@ -166,7 +170,7 @@ const PolarPlot = React.memo(({ data, weatherData, showWeather, width, height, t
 
   return (
     <View style={styles.chartWrapper}>
-      <Text style={styles.title}>{title}</Text>
+      <Text style={styles.title}>{title || "Direction vs Altitude"}</Text>
       <Svg width={width} height={height}>
         {[0.25, 0.5, 0.75, 1].map((fraction, index) => {
           const r = fraction * radius;
@@ -233,7 +237,7 @@ export default function App() {
   const [isPaused, setIsPaused] = useState(false);
   const [fetchError, setFetchError] = useState(null);
   const [weatherData, setWeatherData] = useState([]);
-  const [showWeatherData, setShowWeatherData] = useState(true);
+  const [showWeatherData, setShowWeatherData] = useState(false);
 
   // Fetch log data
   useEffect(() => {
@@ -275,8 +279,9 @@ export default function App() {
     if (showWeatherData) {
       const fetchWeatherData = async () => {
         try {
+          console.log('Fetching weather data from:', WEATHER_FILE_URL);
           const response = await fetch(WEATHER_FILE_URL);
-          if (!response.ok) throw new Error('Failed to fetch weather data');
+          if (!response.ok) throw new Error(`HTTP error ${response.status}`);
           const text = await response.text();
           console.log('Raw weather data:', text);
 
@@ -306,16 +311,18 @@ export default function App() {
               if (key === 'direction') {
                 value = (value + 180) % 360;
               }
-              obj[key] = value;
+              obj[key] = isNaN(value) ? values[index] : value;
               return obj;
             }, {});
           }).filter(point => point !== null && point.altitude >= ALT_MIN && point.altitude <= ALT_MAX);
 
           console.log('Parsed weather data:', data.slice(0, 5));
           setWeatherData(data);
+          setFetchError(null);
         } catch (err) {
           console.error('Error fetching weather data:', err);
           setWeatherData([]);
+          setFetchError('Failed to fetch weather data.');
         }
       };
       fetchWeatherData();
@@ -347,8 +354,9 @@ export default function App() {
 
   // Toggle weather data display
   const toggleWeatherData = useCallback(() => {
+    console.log('Toggling showWeatherData to:', !showWeatherData);
     setShowWeatherData(prev => !prev);
-  }, []);
+  }, [showWeatherData]);
 
   // Pause/Continue replay
   const pauseReplay = useCallback(() => setIsPaused(true), []);
@@ -361,33 +369,80 @@ export default function App() {
       const controller = new AbortController();
       const intervalId = setInterval(async () => {
         try {
+          console.log('Attempting to fetch live data from http://192.168.4.1/readings');
           const response = await fetch('http://192.168.4.1/readings', {
             signal: controller.signal,
-            timeout: 5000, // 5-second timeout
           });
-          if (!response.ok) throw new Error(`HTTP error ${response.status}`);
+          if (!response.ok) {
+            throw new Error(`HTTP error ${response.status}`);
+          }
           const data = await response.json();
-          const elapsedTime = (Date.now() - startTime) / 1000;
+          console.log('Fetched live data:', data);
+
+          // Construct gpsDateTime from individual fields
+          const gpsDateTime = `20${data.gpsYear}-${data.gpsMon.padStart(2, '0')}-${data.gpsDay.padStart(2, '0')} ${data.gpsStd.padStart(2, '0')}:${data.gpsMin.padStart(2, '0')}:${data.gpsSek.padStart(2, '0')}`;
+
           const altitude = parseFloat(data.calt) || 0;
+          const vSpeed = parseFloat(data.cvario) || 0;
+          const acceleration = parseFloat(data.cacc) || 0;
+          const direction = parseFloat(data.gpsAngle) || 0;
+          const speed = parseFloat(data.gpsSpeed) || 0;
+          const temperature = parseFloat(data.tbt) || 0; // Fixed typo: lbt -> tbt
+          const humidity = parseFloat(data.lbc) || 0;
+
+          // Validate data
+          if (isNaN(altitude) || isNaN(vSpeed) || isNaN(acceleration) || isNaN(direction) || isNaN(speed) || isNaN(temperature) || isNaN(humidity)) {
+            console.warn('Invalid data received:', { altitude, vSpeed, acceleration, direction, speed, temperature, humidity });
+            return;
+          }
 
           if (altitude >= ALT_MIN && altitude <= ALT_MAX) {
             setLatestAltitude(altitude);
-            setLatestVSpeed(parseFloat(data.cvario) || 0);
-            setLatestAcceleration(parseFloat(data.cacc) || 0);
-            setLatestDirection(parseFloat(data.gpsAngle) || 0);
-            setLatestSpeed(parseFloat(data.gpsSpeed) || 0);
-            setLatestTemperature(parseFloat(data.lbt) || 0);
-            setLatestHumidity(parseFloat(data.lbc) || 0);
-            setLatestGpsDateTime(data.gpsDateTime || '');
+            setLatestVSpeed(vSpeed);
+            setLatestAcceleration(acceleration);
+            setLatestDirection(direction);
+            setLatestSpeed(speed);
+            setLatestTemperature(temperature);
+            setLatestHumidity(humidity);
+            setLatestGpsDateTime(gpsDateTime);
 
-            setVSpeedData(prev => [...prev, { time: elapsedTime, vSpeed: parseFloat(data.cvario) || 0 }].slice(-MAX_POINTS_ALT));
-            setAccelerationData(prev => [...prev, { time: elapsedTime, acceleration: parseFloat(data.cacc) || 0 }].slice(-MAX_POINTS_ACC));
-            setDirectionData(prev => [...prev, { time: elapsedTime, direction: parseFloat(data.gpsAngle) || 0, altitude }].slice(-MAX_POINTS_ALT));
-            setSpeedData(prev => [...prev, { time: elapsedTime, speed: parseFloat(data.gpsSpeed) || 0, altitude }].slice(-MAX_POINTS_ALT));
-            setTemperatureData(prev => [...prev, { time: elapsedTime, temperature: parseFloat(data.lbt) || 0, altitude }].slice(-MAX_POINTS_ALT));
-            setHumidityData(prev => [...prev, { time: elapsedTime, humidity: parseFloat(data.lbc) || 0, altitude }].slice(-MAX_POINTS_ALT));
+            const elapsedTime = (Date.now() - startTime) / 1000;
+
+            // Update diagram data consistently with replay mode
+            setVSpeedData(prev => {
+              const newData = [...prev, { time: elapsedTime, vSpeed }].slice(-MAX_POINTS_ALT);
+              console.log('Updated vSpeedData:', newData.slice(-5));
+              return newData;
+            });
+            setAccelerationData(prev => {
+              const newData = [...prev, { time: elapsedTime, acceleration }].slice(-MAX_POINTS_ACC);
+              console.log('Updated accelerationData:', newData.slice(-5));
+              return newData;
+            });
+            setDirectionData(prev => {
+              const newData = [...prev, { time: elapsedTime, direction, altitude }].slice(-MAX_POINTS_ALT);
+              console.log('Updated directionData:', newData.slice(-5));
+              return newData;
+            });
+            setSpeedData(prev => {
+              const newData = [...prev, { time: elapsedTime, speed, altitude }].slice(-MAX_POINTS_ALT);
+              console.log('Updated speedData:', newData.slice(-5));
+              return newData;
+            });
+            setTemperatureData(prev => {
+              const newData = [...prev, { time: elapsedTime, temperature, altitude }].slice(-MAX_POINTS_ALT);
+              console.log('Updated temperatureData:', newData.slice(-5));
+              return newData;
+            });
+            setHumidityData(prev => {
+              const newData = [...prev, { time: elapsedTime, humidity, altitude }].slice(-MAX_POINTS_ALT);
+              console.log('Updated humidityData:', newData.slice(-5));
+              return newData;
+            });
 
             setFetchError(null); // Clear any previous errors on successful fetch
+          } else {
+            console.warn(`Altitude ${altitude} out of range [${ALT_MIN}, ${ALT_MAX}]`);
           }
         } catch (error) {
           console.error('Failed to fetch readings:', error);
@@ -395,6 +450,7 @@ export default function App() {
         }
       }, 1000);
       return () => {
+        console.log('Cleaning up live data fetch');
         controller.abort();
         clearInterval(intervalId);
       };
@@ -417,12 +473,36 @@ export default function App() {
           const altitude = point.Baro_Alt_m;
 
           if (altitude >= ALT_MIN && altitude <= ALT_MAX) {
-            setVSpeedData(prev => [...prev, { time: point.Runtime, vSpeed: point.VAR_Kal_m_s }].slice(-MAX_POINTS_ALT));
-            setAccelerationData(prev => [...prev, { time: point.Runtime, acceleration: point.meanACC_Kal_m_s2 }].slice(-MAX_POINTS_ACC));
-            setDirectionData(prev => [...prev, { time: point.Runtime, direction: point.HDG_deg, altitude }].slice(-MAX_POINTS_ALT));
-            setSpeedData(prev => [...prev, { time: point.Runtime, speed: point.GS_kt, altitude }].slice(-MAX_POINTS_ALT));
-            setTemperatureData(prev => [...prev, { time: point.Runtime, temperature: point.Envelope_Temp_Deg, altitude }].slice(-MAX_POINTS_ALT));
-            setHumidityData(prev => [...prev, { time: point.Runtime, humidity: point.varioVar_m_s, altitude }].slice(-MAX_POINTS_ALT));
+            setVSpeedData(prev => {
+              const newData = [...prev, { time: point.Runtime, vSpeed: point.VAR_Kal_m_s }].slice(-MAX_POINTS_ALT);
+              console.log('Updated vSpeedData (replay):', newData.slice(-5));
+              return newData;
+            });
+            setAccelerationData(prev => {
+              const newData = [...prev, { time: point.Runtime, acceleration: point.meanACC_Kal_m_s2 }].slice(-MAX_POINTS_ACC);
+              console.log('Updated accelerationData (replay):', newData.slice(-5));
+              return newData;
+            });
+            setDirectionData(prev => {
+              const newData = [...prev, { time: point.Runtime, direction: point.HDG_deg, altitude }].slice(-MAX_POINTS_ALT);
+              console.log('Updated directionData (replay):', newData.slice(-5));
+              return newData;
+            });
+            setSpeedData(prev => {
+              const newData = [...prev, { time: point.Runtime, speed: point.GS_kt, altitude }].slice(-MAX_POINTS_ALT);
+              console.log('Updated speedData (replay):', newData.slice(-5));
+              return newData;
+            });
+            setTemperatureData(prev => {
+              const newData = [...prev, { time: point.Runtime, temperature: point.Envelope_Temp_Deg, altitude }].slice(-MAX_POINTS_ALT);
+              console.log('Updated temperatureData (replay):', newData.slice(-5));
+              return newData;
+            });
+            setHumidityData(prev => {
+              const newData = [...prev, { time: point.Runtime, humidity: point.varioVar_m_s, altitude }].slice(-MAX_POINTS_ALT);
+              console.log('Updated humidityData (replay):', newData.slice(-5));
+              return newData;
+            });
 
             setLatestAltitude(altitude);
             setLatestVSpeed(point.VAR_Kal_m_s);
@@ -438,12 +518,16 @@ export default function App() {
         }
 
         if (index >= logData.length) {
+          console.log('Replay completed');
           clearInterval(intervalId);
           setIsReplayMode(false);
           setIsPaused(false);
         }
       }, 100);
-      return () => clearInterval(intervalId);
+      return () => {
+        console.log('Cleaning up replay');
+        clearInterval(intervalId);
+      };
     }
   }, [isReplayMode, isPaused, logData]);
 
@@ -524,7 +608,7 @@ export default function App() {
           </View>
           <View style={styles.weatherButtonContainer}>
             <Button
-              title={showWeatherData ? "Hide WetterHeidi UpperWinds" : "WetterHeidi UpperWinds"}
+              title={showWeatherData ? "Hide WetterHeidi Upper_Winds" : "WetterHeidi Upper_Winds"}
               onPress={toggleWeatherData}
               color="#006400"
             />
