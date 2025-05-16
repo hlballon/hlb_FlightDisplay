@@ -369,8 +369,12 @@ export default function App() {
       const controller = new AbortController();
       const intervalId = setInterval(async () => {
         try {
-          console.log('Attempting to fetch live data from http://192.168.4.1/readings');
-          const response = await fetch('http://192.168.4.1/readings', {
+         console.log('Attempting to fetch live data from http://192.168.4.1/readings');
+         const response = await fetch('http://192.168.4.1/readings', {
+
+//          console.log('Attempting to fetch live data from http://192.168.88.51/readings');
+//          const response = await fetch('http://192.168.88.51/readings', {  
+
             signal: controller.signal,
           });
           if (!response.ok) {
@@ -382,13 +386,13 @@ export default function App() {
           // Construct gpsDateTime from individual fields
           const gpsDateTime = `20${data.gpsYear}-${data.gpsMon.padStart(2, '0')}-${data.gpsDay.padStart(2, '0')} ${data.gpsStd.padStart(2, '0')}:${data.gpsMin.padStart(2, '0')}:${data.gpsSek.padStart(2, '0')}`;
 
-          const altitude = parseFloat(data.calt) || 0;
-          const vSpeed = parseFloat(data.cvario) || 0;
-          const acceleration = parseFloat(data.cacc) || 0;
+          const altitude = parseFloat(data.Baro_Alt_m) || 0;
+          const vSpeed = parseFloat(data.KalF_vSpeed) || 0;
+          const acceleration = parseFloat(data.KalF_acc || 0;
           const direction = parseFloat(data.gpsAngle) || 0;
           const speed = parseFloat(data.gpsSpeed) || 0;
-          const temperature = parseFloat(data.tbt) || 0; // Fixed typo: lbt -> tbt
-          const humidity = parseFloat(data.lbc) || 0;
+          const temperature = parseFloat(data.Atm_Temp) || 0; // Fixed typo: lbt -> tbt
+          const humidity = parseFloat(data.Atm_Hum) || 0;
 
           // Validate data
           if (isNaN(altitude) || isNaN(vSpeed) || isNaN(acceleration) || isNaN(direction) || isNaN(speed) || isNaN(temperature) || isNaN(humidity)) {
